@@ -1,0 +1,72 @@
+# set up: docker-compose up -d --build
+# use --remove-orphans to delete other running containers
+# use --force-recreate for recreate containers
+#
+# to acccess container shell use this: docker-compose exec <service> bash
+# for example: docker-compose exec ids bash
+#
+# for testing dhcp good client u can run this command
+# docker-compose exec icg bash
+# dhclient -d eth0
+#
+# for testing dhcp bandit client:
+#   1) i'm not sure but i think u can use volumes to connect host filesystem with bad client service
+#      then possibly u can develop application locally and execute it in the container shell
+#   2) anyway i mapped dhcp service on 11011 port on the local machine => use this port for local testing
+
+version: '3.1'
+
+services:
+
+  ids: # i mean ipk-dhcp-server for easy typing
+    container_name: ipk_dhcp_server
+    cap_add:
+      - NET_ADMIN
+    image: ipk_dhcp
+    command: >
+      bash -c "service isc-dhcp-server start
+      && bash entrypoint.sh"
+    networks:
+      ipk_test:
+        ipv4_address: 192.168.42.42 # dhcp server ip address use it for testing
+    expose:
+      - 67/udp  # 67 dhcp protocol port
+      - 67/tcp
+    ports:
+      - "11011:67/udp" # HOST:CONTAINER
+      - "11011:67/tcp"
+    build:
+      context: ./ipk-dhcp-build
+      dockerfile: Dockerfile
+
+  icg: # i mean ipk-dhcp-client-good for easy typing
+    container_name: ipk_dhcp_client_good
+    depends_on:
+      - ids
+    image: ipk_dhcp
+    cap_add:
+      - NET_ADMIN
+    command: bash entrypoint.sh
+    networks:
+      - ipk_test
+
+  icb: # i mean ipk-dhcp-client-bandit for easy typing
+    container_name: ipk_dhcp_client_bandit
+    depends_on:
+      - ids
+    image: ipk_dhcp
+    cap_add:
+      - NET_ADMIN
+    command: bash entrypoint.sh
+    # volumes: /your/project/path:/home # HOST:CONTAINER
+    networks:
+      - ipk_test
+
+networks:
+  ipk_test:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        # ip range for hosts 192.168.42.33 - 192.168.42.46 except 192.168.42.42 
+      - subnet: 192.168.42.32/28 # subnet mask 255.255.255.240
